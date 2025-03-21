@@ -10,81 +10,182 @@ import SwiftUI
 struct ContentView: View {
     @State var moves: [Move?] = Array(repeating: nil, count: 9)
     @State var isGameBoardDisabled = false
-    @State var gameOver = false //ตรวจว่าเกมจบหรือยัง
+    @State var gameOver = false
+    @State var currentPlayer: Player = .human
+    @State var resultMessage = ""
+    @State var pastTurn: Player = .computer
+    
     var body: some View {
-        NavigationView() {
-            LazyVGrid(columns: [GridItem(), GridItem(), GridItem()]) {
-                ForEach(0..<9) { index in
-                    CellView(mark: moves[index]?.mark ?? "")
-                        .onTapGesture {
-                            isGameBoardDisabled.toggle()
-                            if humanPlay(at: index) { return }
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                                if computerPlay() { return }
-                                isGameBoardDisabled.toggle()
+        NavigationView {
+        
+            VStack {
+                Spacer()
+                LazyVGrid(columns: [GridItem(), GridItem(), GridItem()]) {
+                    ForEach(0..<9) { index in
+                        CellView(mark: moves[index]?.mark ?? "")
+                            .onTapGesture {
+                                humanPlay(at: index)
                             }
-                        }
+                    }
+                }
+                
+                .padding()
+                .disabled(isGameBoardDisabled || gameOver)
+                Spacer()
+                
+                if gameOver {
+                    Text(resultMessage)
+                        .font(.title)
+                        .padding()
+                    
+                    
+                    Button("Play Again") {
+                        resetGame()
+                    }
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(Color.red)
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+                    .font(.title2)
+                    .padding(.horizontal)
+                    .padding(.bottom, 20)
+                   
                 }
             }
-            .padding().disabled(isGameBoardDisabled).navigationTitle("Tic Tac Toe")
-        }
-        if gameOver {
-            Button("Play Again") {
-                resetGame()
-            }
-            .padding()
-            .background(Color.red)
-            .foregroundColor(.white)
-            .cornerRadius(10)
-            .font(.title2)
+            .frame(maxHeight: .infinity)
+            .navigationTitle("Tic Tac Toe")
         }
     }
+    
+
     func resetGame() {
+        // 1. เคลียร์กระดานให้ว่าง
         moves = Array(repeating: nil, count: 9)
         isGameBoardDisabled = false
         gameOver = false
+        resultMessage = ""
+        
+        // 2. เก็บข้อมูลว่า 'เกมที่แล้วใครเป็นคนเริ่ม'
+        pastTurn = currentPlayer
+        
+        // 3. สลับฝั่งผู้เริ่มเกม
+        // ถ้าเกมที่แล้ว human เริ่ม ➔ รอบนี้ computer เริ่ม
+        // ถ้าเกมที่แล้ว computer เริ่ม ➔ รอบนี้ human เริ่ม
+        currentPlayer = (pastTurn == .human) ? .computer : .human
+
+        // 4. ถ้ารอบนี้ computer เป็นคนเริ่ม ➔ ให้มันเดินเลยทันที
+        if currentPlayer == .computer {
+            isGameBoardDisabled = true // ล็อคกระดานก่อนคอมเดิน
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                computerPlay()  // ให้คอมเดิน
+            }
+        }
     }
-    func humanPlay(at index: Int) -> Bool {
+
+
+
+    func humanPlay(at index: Int) {
+        guard !isCellOccupied(in: moves, forIndex: index) else { return }
+        guard currentPlayer == .human else { return }
+
         moves[index] = Move(player: .human, boardIndex: index)
+
         if checkWinCondition(for: .human, in: moves) {
-            print("You won!")
+            resultMessage = "You Won!"
             gameOver = true
-            return true
+            return
         }
+
         if checkForDraw(in: moves) {
-            print("Draw")
+            resultMessage = "It's a Draw!"
             gameOver = true
-            return true
+            return
         }
-        return false
+
+        currentPlayer = .computer
+        isGameBoardDisabled = true
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            computerPlay()
+        }
     }
-    func computerPlay() -> Bool {
-        let computerPosition = determineComputerMovePoswition(in: moves)
-        moves[computerPosition] = Move(player: .computer, boardIndex: computerPosition)
+
+    func computerPlay() {
+        var moveMade = false
+
+        if let winMove = findWinningMove(for: .computer) {
+            moves[winMove] = Move(player: .computer, boardIndex: winMove)
+            moveMade = true
+        } else if let blockMove = findWinningMove(for: .human) {
+            moves[blockMove] = Move(player: .computer, boardIndex: blockMove)
+            moveMade = true
+        } else if moves[4] == nil {
+            moves[4] = Move(player: .computer, boardIndex: 4)
+            moveMade = true
+        }
+
+        if !moveMade {
+            let computerPosition = determineComputerMovePosition(in: moves)
+            moves[computerPosition] = Move(player: .computer, boardIndex: computerPosition)
+        }
+
         if checkWinCondition(for: .computer, in: moves) {
-            print("You lost!")
+            resultMessage = "You Lost!"
             gameOver = true
-            return true
+            return
         }
-        return false
+
+        if checkForDraw(in: moves) {
+            resultMessage = "It's a Draw!"
+            gameOver = true
+            return
+        }
+
+        currentPlayer = .human
+        isGameBoardDisabled = false
     }
+
     func checkForDraw(in moves: [Move?]) -> Bool {
         moves.compactMap { $0 }.count == 9
     }
+
     func checkWinCondition(for player: Player, in moves: [Move?]) -> Bool {
-        let winPatterns: [Set<Int>] = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]]
-        let playerMoves = moves.compactMap { $0 }.filter { $0.player == player } //move = parameter, $0 = parameter ตัวแรก, มี 2 ตัวก็ $0 $1
-        let playerPositions = Set(playerMoves.map { $0.boardIndex })
-        // ลบค่าใน set ไปเรื่อยๆ เหลือช่องสุดท้ายให้วางให้ชนะ หรือเหลือช่องสุดท้ายคนจะชนะก็ให้คอมไปวางขวางไว้
-        for pattern in winPatterns where pattern.isSubset(of: playerPositions) {
-            return true
-        }
-        return false
+        let winPatterns: [Set<Int>] = [
+            [0,1,2],[3,4,5],[6,7,8],
+            [0,3,6],[1,4,7],[2,5,8],
+            [0,4,8],[2,4,6]
+        ]
+        let playerPositions = Set(moves.compactMap { $0 }.filter { $0.player == player }.map { $0.boardIndex })
+        return winPatterns.contains { $0.isSubset(of: playerPositions) }
     }
+
+    // แก้ให้หาเฉพาะ pattern ที่มี 2 ตำแหน่งเป็นของ player และอีกช่องว่าง
+    func findWinningMove(for player: Player) -> Int? {
+        let winPatterns: [Set<Int>] = [
+            [0,1,2],[3,4,5],[6,7,8],
+            [0,3,6],[1,4,7],[2,5,8],
+            [0,4,8],[2,4,6]
+        ]
+
+        let playerPositions = Set(moves.compactMap { $0 }.filter { $0.player == player }.map { $0.boardIndex })
+
+        for pattern in winPatterns {
+            let positions = pattern.intersection(playerPositions)
+            let emptyPositions = pattern.subtracting(Set(moves.compactMap { $0?.boardIndex }))
+
+            if positions.count == 2 && emptyPositions.count == 1 {
+                return emptyPositions.first
+            }
+        }
+        return nil
+    }
+
     func isCellOccupied(in moves: [Move?], forIndex: Int) -> Bool {
         moves[forIndex] != nil
     }
-    func determineComputerMovePoswition(in moves: [Move?]) -> Int {
+
+    func determineComputerMovePosition(in moves: [Move?]) -> Int {
         var movePosition = Int.random(in: 0..<9)
         while isCellOccupied(in: moves, forIndex: movePosition) {
             movePosition = Int.random(in: 0..<9)
@@ -93,27 +194,32 @@ struct ContentView: View {
     }
 }
 
-// View
 enum Player {
     case human, computer
 }
 
-// Model
 struct Move {
     let player: Player
     let boardIndex: Int
     var mark: String {
-        player == .human ? "xmark" : "circle"
+        player == .human ? "circle" : "xmark"
     }
 }
 
 struct CellView: View {
     let mark: String
     var body: some View {
+        
         ZStack {
-            Color.blue.opacity(0.5).frame(width: squareSize, height: squareSize).cornerRadius(15)
-            Image(systemName: mark)    // ?? = default | "" = blank
-                .resizable().frame(width: markSize, height: markSize).foregroundColor(.white)
+            
+            Color.blue.opacity(0.5)
+                .frame(width: squareSize, height: squareSize)
+                .cornerRadius(15)
+                
+            Image(systemName: mark)
+                .resizable()
+                .frame(width: markSize, height: markSize)
+                .foregroundColor(.white)
         }
     }
     var squareSize: CGFloat { UIScreen.main.bounds.width / 3 - 15 }
