@@ -13,13 +13,13 @@ struct ContentView: View {
     @State var gameOver = false
     @State var currentPlayer: Player = .human
     @State var resultMessage = ""
-    @State var pastTurn: Player = .computer
-    
+    @State var startPastTurn: Player = .human
+
     var body: some View {
         NavigationView {
-        
             VStack {
                 Spacer()
+                
                 LazyVGrid(columns: [GridItem(), GridItem(), GridItem()]) {
                     ForEach(0..<9) { index in
                         CellView(mark: moves[index]?.mark ?? "")
@@ -28,16 +28,15 @@ struct ContentView: View {
                             }
                     }
                 }
-                
                 .padding()
                 .disabled(isGameBoardDisabled || gameOver)
+                
                 Spacer()
                 
                 if gameOver {
                     Text(resultMessage)
                         .font(.title)
                         .padding()
-                    
                     
                     Button("Play Again") {
                         resetGame()
@@ -50,7 +49,6 @@ struct ContentView: View {
                     .font(.title2)
                     .padding(.horizontal)
                     .padding(.bottom, 20)
-                   
                 }
             }
             .frame(maxHeight: .infinity)
@@ -58,32 +56,23 @@ struct ContentView: View {
         }
     }
     
-
     func resetGame() {
-        // 1. เคลียร์กระดานให้ว่าง
+        
         moves = Array(repeating: nil, count: 9)
         isGameBoardDisabled = false
         gameOver = false
         resultMessage = ""
-        
-        // 2. เก็บข้อมูลว่า 'เกมที่แล้วใครเป็นคนเริ่ม'
-        pastTurn = currentPlayer
-        
-        // 3. สลับฝั่งผู้เริ่มเกม
-        // ถ้าเกมที่แล้ว human เริ่ม ➔ รอบนี้ computer เริ่ม
-        // ถ้าเกมที่แล้ว computer เริ่ม ➔ รอบนี้ human เริ่ม
-        currentPlayer = (pastTurn == .human) ? .computer : .human
 
-        // 4. ถ้ารอบนี้ computer เป็นคนเริ่ม ➔ ให้มันเดินเลยทันที
+        startPastTurn = (startPastTurn == .human) ? .computer : .human
+        currentPlayer = startPastTurn
+        
         if currentPlayer == .computer {
-            isGameBoardDisabled = true // ล็อคกระดานก่อนคอมเดิน
+            isGameBoardDisabled = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                computerPlay()  // ให้คอมเดิน
+                computerPlay()
             }
         }
     }
-
-
 
     func humanPlay(at index: Int) {
         guard !isCellOccupied(in: moves, forIndex: index) else { return }
@@ -160,7 +149,6 @@ struct ContentView: View {
         return winPatterns.contains { $0.isSubset(of: playerPositions) }
     }
 
-    // แก้ให้หาเฉพาะ pattern ที่มี 2 ตำแหน่งเป็นของ player และอีกช่องว่าง
     func findWinningMove(for player: Player) -> Int? {
         let winPatterns: [Set<Int>] = [
             [0,1,2],[3,4,5],[6,7,8],
@@ -209,13 +197,11 @@ struct Move {
 struct CellView: View {
     let mark: String
     var body: some View {
-        
         ZStack {
-            
-            Color.blue.opacity(0.5)
+            Color.pink.opacity(0.5)
                 .frame(width: squareSize, height: squareSize)
                 .cornerRadius(15)
-                
+
             Image(systemName: mark)
                 .resizable()
                 .frame(width: markSize, height: markSize)
